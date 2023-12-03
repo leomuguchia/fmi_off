@@ -19,6 +19,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException  
 import os
 import json
 import subprocess
@@ -72,6 +73,31 @@ def check_session_expired(driver):
              print(f"Error while quitting the driver: {quit_error}")
             sys.exit(0)
             return True  # Continue button not found, assume session expired
+
+def set_preference():
+    default_preference = "cmd"
+    print(f"Default preference is '{default_preference}'.")
+
+    while True:
+        preference = input("Enter your preference (gui or cmd): ").lower()
+        if preference in ["gui", "cmd"]:
+            return preference
+        elif not preference:
+            return default_preference
+        else:
+            print("Invalid preference. Please enter 'gui' or 'cmd'.")
+
+            
+def set_bg_sleep():
+    default_sleep = 1
+    bg_sleep_input = input(f"Background activity should run after (default: {default_sleep} minute): ")
+    
+    try:
+        bg_sleep = int(bg_sleep_input)
+    except ValueError:
+        bg_sleep = default_sleep
+    
+    return bg_sleep
 
 
 def generate_random_name():
@@ -241,13 +267,20 @@ def fill_out_form(driver, details):
     file_input = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.ID, "files"))
     )
-    image_paths = [
-        os.path.abspath('./images/screenshot.png'),
-        os.path.abspath('./images/screenshot.pdf'),
-    ]
-    for path in image_paths:
-        file_input.send_keys(path)
-        time.sleep(1)  # Adjust the wait time as needed
+    # Check if the file input is present
+    if file_input:
+        image_paths = [
+            os.path.abspath('./images/screenshot.png'),
+            os.path.abspath('./images/screenshot.pdf'),
+        ]
+
+        for path in image_paths:
+            try:
+                file_input.send_keys(path)
+                time.sleep(1)  # Adjust the wait time as needed
+            except Exception as file_input_error:
+                print(f"Error while uploading file: {file_input_error}")
+                
     
     # Find the submit button by class
     submit_button = WebDriverWait(driver, 10).until(
@@ -256,20 +289,38 @@ def fill_out_form(driver, details):
 
     # Check if the button is not disabled
     if 'disabled' not in submit_button.get_attribute('class'):
-        # If not disabled, click the submit button
-        submit_button.click()
-        print("details_saved@draft")
+        # Retry mechanism for handling page reloads during form submission
+        max_retries = 3
+        for _ in range(max_retries):
+            try:
+             # If not disabled, click the submit button
+             submit_button.click()
+             print("\ndetails_saved@draft")
 
-        time.sleep(5)
+             time.sleep(5)
         
-        continue_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.button--primary'))
-        )
-        continue_button.click()
+             continue_button = WebDriverWait(driver, 10).until(
+                 EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.button--primary'))
+                )
+             continue_button.click()
+             print("details_saved@submit\n")
 
-        time.sleep(5)
+             time.sleep(5)
 
-        lookup_case(driver, details)
+             lookup_case(driver, details)
+
+             break  # Exit the loop if successful
+            except (TimeoutException, StaleElementReferenceException) as submit_error:
+                print(f"Error during form submission: {submit_error}")
+                print("Retrying...")
+
+    else:
+        print("Submit button disabled. Exiting.")
+        try:
+            driver.quit()
+        except Exception as quit_error:
+            print(f"Error while quitting the driver: {quit_error}")
+        sys.exit(1)
         
 
 def lookup_case(driver, details):
@@ -298,22 +349,21 @@ def lookup_case(driver, details):
         # Save case details to case.txt
         save_case_details(case_id, details['last_name'])
 
-        return case_id
+        filename = f"{details['last_name']}@{case_id}"
+        capture_screenshot(driver, filename)
+    
+        print("Success! \nWe will now close this @instance")
+        print("Background checks for your case status runs after every 30 minutes")
+        print("Do not close this window(*optional! 4 optimal results)")
+        print("keep tabs 'n' 'goodluck' '_'")
+        time.sleep(10)
+    
+        print("Closing@1")
+        driver.quit()
     else:
         print("Case ID not found in the expected format on the page.")
-        return None
-  
-    filename = f"{details['last_name']}@{case_id}"
-    capture_screenshot(driver, filename)
-    
-    print("Success! \nWe will now close this @instance")
-    print("Background checks for your case status runs after every 30 minutes")
-    print("Do not close this window(*optional! 4 optimal results)")
-    print("keep tabs 'n' 'goodluck' '_'")
-    time.sleep(10)
-    
-    print("Closing@1")
-    driver.quit()
+        print("Closing@1\n\n")
+        driver.quit()
 
     
 def save_case_details(case_id, last_name):
@@ -332,7 +382,7 @@ def capture_screenshot(driver, filename):
     driver.save_screenshot(f'images/{filename}.png')
 
 
-def background_instance():
+def background_instance(bg_sleep):
     while True:
         # Fetch case details from case.txt
         case_file_path = os.path.abspath('images/case.txt')
@@ -354,8 +404,10 @@ def background_instance():
             _, case_id = case_id_line.split(": ")
             _, last_name = last_name_line.split(": ")
 
-            # Create a new Chrome browser instance for background check
-            background_driver = webdriver.Chrome()
+            # Create a new Chrome browser instance for background check in headless mode
+            chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument("--headless")
+            background_driver = webdriver.Chrome(options=chrome_options)
 
             try:
                 background_driver.get('https://getsupport.apple.com/activity')
@@ -367,9 +419,20 @@ def background_instance():
                 case_id_input.clear()
                 case_id_input.send_keys(case_id)
 
+                # Wait for 2 seconds for the last name input to appear
+                time.sleep(2)
+
+                # Enter the last name
+                last_name_input = background_driver.find_element(By.ID, 'last-name')
+                last_name_input.clear()
+                last_name_input.send_keys(last_name)
+
                 # Similar waits for other input fields...
 
-                submit_button = background_driver.find_element(By.CSS_SELECTOR, 'button.case-lookup-submit')
+                # Wait for the submit button to be clickable
+                submit_button = WebDriverWait(background_driver, 10).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.case-lookup-submit'))
+                )
                 submit_button.click()
 
                 # Wait for the next page to load
@@ -378,75 +441,94 @@ def background_instance():
                 # Check for the "Case Mismatch" modal
                 try:
                     mismatch_modal = background_driver.find_element(By.CSS_SELECTOR, 'div.case-mismatch-modal')
-                    words = mismatch_modal.text.split()
-                    print("Case Mismatch Modal Detected. Words:", words)
+                    modal_text = mismatch_modal.text
+                    print(f"Apple: {modal_text}")
+                    print(f"\nBackground check will run every {bg_sleep} minutes")
                 except:
-                    print("No Case Mismatch Modal detected.")
+                    print("Case ID active @apple_support")
+                    #handle case ID found scenario
 
             finally:
                 background_driver.quit()
-
-            time.sleep(60)
+            
+            time.sleep(bg_sleep * 60)
 
         except Exception as e:
             print(f"An error occurred during background check: {e}")
             continue
 
 
-
 if __name__ == "__main__":
     # Prompt user to paste the confirmation link
     confirmation_link = input("Paste the apple support confirmation link: ")
-
+    
     # Check if the confirmation link is valid
     if not is_valid_confirmation_link(confirmation_link):
         print("Invalid confirmation link. Closing.")
     else:
-         # Create a new Chrome browser instance
-        driver = webdriver.Chrome()
+     preference = set_preference()
+     bg_sleep = set_bg_sleep()
+     # Create a new Chrome browser instance for background check
+     if preference == "gui":
+         driver = webdriver.Chrome()
+     else:
+         # Create a new Chrome browser instance for background check in headless mode
+         chrome_options = webdriver.ChromeOptions()
+         chrome_options.add_argument("--headless")
+         driver = webdriver.Chrome(options=chrome_options)
 
+     # Open the provided confirmation link
+     driver.get(confirmation_link)
+     print(f"Checking for session validity: {confirmation_link}")
+     
+     # Check if the session has expired
+     if check_session_expired(driver):
+         driver.quit()  # Session expired, exit the script
 
-        # Open the provided confirmation link
-        driver.get(confirmation_link)
-        print(f"Checking for session validity: {confirmation_link}")
+     # Check for the "Continue" button
+     try:
+         continue_button = WebDriverWait(driver, 10).until(
+             EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.button--primary'))
+            )
 
-        # Check if the session has expired
-        if check_session_expired(driver):
-            driver.quit()  # Session expired, exit the script
+         # Click the "Continue" button
+         continue_button.click()
+     except StaleElementReferenceException:
+         # If a stale element exception occurs, re-find the element and click again
+         continue_button = WebDriverWait(driver, 10).until(
+             EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.button--primary'))
+            )
+         continue_button.click()
 
-        # Check for the "Continue" button
-        continue_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.button--primary'))
-        )
+     # Prompt user to choose between auto and manual entry
+     print("*Hint: Auto fetches the device details based on device IMEI/SN")
+     user_choice = input("Choose 'auto' or 'manual' entry (default: auto): ").lower()
 
-        # Click the "Continue" button
-        continue_button.click()
+     # Set default choice to "auto" if the user doesn't provide any input
+     user_choice = user_choice if user_choice in ['auto', 'manual'] else 'auto'
 
-        # Prompt user to choose between auto and manual entry
-        user_choice = input("Choose 'auto' or 'manual' entry: ").lower()
+     if user_choice == 'auto':
+         # You need to provide the SickW API key and imei
+         imei, api_key = get_key()
+         details = fetch_details_from_api(api_key, imei)
+     elif user_choice == 'manual':
+         details = manual_entry_popup() 
+     else:
+         print("Invalid choice. Closing.")
 
-        if user_choice == 'auto':
-            # You need to provide the SickW API key and imei
-            imei, api_key = get_key()
-            details = fetch_details_from_api(api_key, imei)
-        elif user_choice == 'manual':
-            details = manual_entry_popup()
-        else:
-            print("Invalid choice. Closing.")
-
-        # Rest of the logic to fill out the form
-        if details:
+     # Rest of the logic to fill out the form
+     if details:
          fill_out_form(driver, details)
-        else:
+     else:
          print("Closing due to missing details.")
          sys.exit(1)
             
 
-        # Start the background instance as a separate thread
-        background_thread = threading.Thread(target=background_instance)
-        background_thread.start()
-        
-        background_thread.join()
+    # Start the background instance as a separate thread
+    background_thread = threading.Thread(target=background_instance, args=(bg_sleep,))
+    background_thread.start()
+    background_thread.join()
+
         
         
         
