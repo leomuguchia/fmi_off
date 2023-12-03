@@ -1,67 +1,53 @@
-# fmi_off
+# FMI Script
 
-Created for use for a larger iDevice management project but this script is open for use and modifications
-I chose not to automate the email verification process to allow the user to receive updates on progress of FMI Off from Apple
+## Introduction
 
-Requirements:
-    Python3
-    Chrome webdriver
-    Selenium
-   
+The FMI Script is part of a larger iOS device management project, designed to disable the Find My iPhone feature. This script is open for public use and contribution.
 
-Usage:
-    Install the dependencies required in the import statements
-    You need the IMEI number of your idevice
-    Head to https://al-support.apple.com/#/additional-support and get the Apple confirmation link
-    The link should be sent to your email after verifying your email
-    Run the script and paste the confirmation email
+## Installation
 
-    For; 
-       a. Auto
-          Head to sickw.com and get your API keys
-          You would require to pay a small fee
-          Paste your API Keys 
+1. **Clone the repository:**
+    ```bash
+    git clone https://github.com/liomuguchia/fmi-script.git
+    cd fmi-script
+    ```
 
-        b. Manual
-           You will need to enter idevice details manually including buyout receipts and owner details
-           *Recommended auto
-           Manual is free
+2. **Install Python 3:**
 
-    After successfully submitting the details, the script runs a background check after every 30 minutes, to fetch your case ID progress
-    Have fun @user!!
+    If you don't have Python 3 installed, you can download it from [Python's official website](https://www.python.org/downloads/).
 
+3. **Install pip dependencies:**
 
+    Open a terminal in the project directory and run the following command to install required Python packages:
+    ```bash
+    pip install -r requirements.txt
+    ```
 
+    If you encounter any issues, make sure to install each package individually using `pip install package-name`.
 
+4. **Download chromedriver:**
 
+    For Selenium to work with Chrome, you need to download chromedriver. Download it from [here](https://sites.google.com/chromium.org/driver/) and make sure it's in your system's PATH.
 
+5. **Check required Python packages:**
 
+    Open a terminal in the project directory and run the following command to check if required Python packages are installed:
+    ```bash
+    python -c "import time, selenium, os, json, subprocess, re, webbrowser, sys, random, threading; print('All dependencies are installed')"
+    ```
 
+## Usage
 
+Run the script:
+```bash
+python FMI.py
+```
 
+Follow the on-screen instructions to provide the Apple Support confirmation link and choose the desired entry method (auto or manual).
 
+### Disclaimer
+This script is provided as-is and is not intended for malicious purposes. Ensure that you have the right to use and modify the script according to your needs. Use it responsibly and in compliance with Apple's terms and conditions.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-script by liomuguchia
-licensed under the GNU Public licence
-feel free to reach me out for consultations 
-github @leomuguchia/@liomuguchia
-instagram @ghost__xo
-buymeacoffee @muguchialio
-script should not be used to breach Apple Inc terms
-
+### Author
+Leomuguchia
+GitHub: leomuguchia

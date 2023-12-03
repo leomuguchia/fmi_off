@@ -1,0 +1,19 @@
+# requirements.txt
+time
+selenium
+webdriver
+selenium.webdriver.common.by
+selenium.webdriver.support.ui
+selenium.webdriver.support.expected_conditions
+selenium.webdriver.support.ui.Select
+selenium.common.exceptions.TimeoutException
+selenium.common.exceptions.StaleElementReferenceException
+os
+json
+subprocess
+re
+webbrowser
+sys
+random
+threading
+datetime
