@@ -31,7 +31,68 @@ import sys
 import random
 import threading
 from datetime import datetime, timedelta
+import colorama
 
+
+def clear_terminal_screen():
+    # Clear the terminal screen
+    os.system('clear' if os.name == 'posix' else 'cls')
+
+def print_menu():
+    # Initialize colorama for cross-platform colored output
+    colorama.init(autoreset=True)
+
+    # ASCII art for the "FMI Off" title inside a button-like structure
+    title_ascii_art = (
+        f"{colorama.Fore.CYAN}"
+        "+-----------------------------------------------------+\n"
+        "|  ____  _           __  __      _   _               |\n"
+        "| | __ )| |_   _ ___\\ \\/ /__  _| |_| |_ ___  _ __   |\n"
+        "| |  _ \\| | | | / __|\\  // _ \\| __| __/ _ \\| '_ \\  |\n"
+        "| |_) | | |_| \\__ \\/\\  / (_) | |_| || (_) | | | | |\n"
+        "|____/|_|\\__,_|___/\\/  \\___/ \\__|\\__\\___/|_| |_| |\n"
+        "|                                                     |\n"
+        "|               [ FMI Off - iDevice Management ]      |\n"
+        "+-----------------------------------------------------+"
+    )
+
+    print(title_ascii_art)
+
+    # Menu options
+    print("1. Submit FMI Removal Request")
+    print("2. Check Existing Cases")
+    print("3. Quit")
+
+
+
+def get_user_choice():
+    # Get user choice and handle invalid input
+    default_choice = "1"
+    while True:
+        choice = input("Select option >").strip()
+
+        if choice in ["1", "2", ""]:
+            return choice
+        else:
+            print("Invalid option. Press Enter for default option")
+            
+def submit_fmi_removal_request():
+    print("\nSubmit FMI Removal Request:")
+    print("Requirements:")
+    print("- iCloud locked device with no previous owner details")
+    print("- IMEI number or serial number")
+    print("- SickW API key")
+    print("- Apple confirmation link (get from: https://al-support.apple.com/#/additional-support)")
+    print("- Note: iPhone should not be in lost mode")
+    input("Press Enter to continue...")
+
+def check_existing_cases():
+    print("\nCheck Existing Cases:")
+    print("1. Check Existing Cases")
+    print("2. Provide your own ID and last name to check case progress")
+    print("3. Quit")
+    option = input("Select option > ").strip()
+    return option
 
 def is_valid_confirmation_link(confirmation_link):
     # Check if the provided link matches the expected format
@@ -382,153 +443,202 @@ def capture_screenshot(driver, filename):
     driver.save_screenshot(f'images/{filename}.png')
 
 
-def background_instance(bg_sleep):
+def background_instance(bg_sleep, run_counter, source):
     while True:
-        # Fetch case details from case.txt
-        case_file_path = os.path.abspath('images/case.txt')
+        run_counter += 1
 
-        if not os.path.exists(case_file_path):
-            with open(case_file_path, 'w') as file:
-                file.write('')  # Create an empty file
+        if source == "existing":
+            # Fetch case details from case.txt
+            case_file_path = os.path.abspath('images/case.txt')
 
-        try:
-            with open(case_file_path, 'r') as file:
-                case_id_line = file.readline().strip()
-                last_name_line = file.readline().strip()
+            if not os.path.exists(case_file_path):
+                print("No existing cases!")
+                print("Closing@0")
+                sys.exit(0)
 
-            if not case_id_line or not last_name_line:
-                print("Case details not found in case.txt. Skipping background check.")
+            try:
+                with open(case_file_path, 'r') as file:
+                    case_id_line = file.readline().strip()
+                    last_name_line = file.readline().strip()
+
+                if not case_id_line or not last_name_line:
+                    print("Case details not found in case.txt. Skipping background check.")
+                    print("Closing@0")
+                    sys.exit(0)
+
+                # Extract case ID and last name
+                _, case_id = case_id_line.split(": ")
+                _, last_name = last_name_line.split(": ")
+
+            except Exception as e:
+                print(f"Error while reading case details: {e}")
                 continue
 
-            # Extract case ID and last name
-            _, case_id = case_id_line.split(": ")
-            _, last_name = last_name_line.split(": ")
+        elif source == "new":
+            while True:
+                case_id = input("Enter your Case ID from Apple: ").strip()
+                last_name = input("Enter the last name used for that case: ").strip()
 
+                if case_id and last_name and len(case_id) >= 8:
+                    break
+                elif len(case_id) < 8:
+                    print("Case ID should be at least 8 characters. Please try again.")
+                else:
+                    print("Both Case ID and last name are required. Please try again.")
+
+        else:
+            print("Invalid source. Exiting.")
+            return None
+
+        try:
             # Create a new Chrome browser instance for background check in headless mode
             chrome_options = webdriver.ChromeOptions()
             chrome_options.add_argument("--headless")
             background_driver = webdriver.Chrome(options=chrome_options)
 
+            background_driver.get('https://getsupport.apple.com/activity')
+
+            # Explicit wait for the case-id input field
+            case_id_input = WebDriverWait(background_driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'case-id'))
+            )
+            case_id_input.clear()
+            case_id_input.send_keys(case_id)
+
+            # Wait for 2 seconds for the last name input to appear
+            time.sleep(2)
+            # Enter the last name
+            last_name_input = background_driver.find_element(By.ID, 'last-name')
+            last_name_input.clear()
+            last_name_input.send_keys(last_name)
+
+            # Similar waits for other input fields...
+
+            # Wait for the submit button to be clickable
+            submit_button = WebDriverWait(background_driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.case-lookup-submit'))
+            )
+            submit_button.click()
+
+            # Wait for the next page to load
+            time.sleep(5)
+
+            # Check for the "Case Mismatch" modal
             try:
-                background_driver.get('https://getsupport.apple.com/activity')
+                mismatch_modal = background_driver.find_element(By.CSS_SELECTOR, 'div.case-mismatch-modal')
+                modal_text = mismatch_modal.text
+                print(f"Case ID {run_counter}: {modal_text}")
+                print(f"\nBackground check will run every {bg_sleep} minutes")
 
-                # Explicit wait for the case-id input field
-                case_id_input = WebDriverWait(background_driver, 10).until(
-                    EC.presence_of_element_located((By.ID, 'case-id'))
-                )
-                case_id_input.clear()
-                case_id_input.send_keys(case_id)
-
-                # Wait for 2 seconds for the last name input to appear
-                time.sleep(2)
-
-                # Enter the last name
-                last_name_input = background_driver.find_element(By.ID, 'last-name')
-                last_name_input.clear()
-                last_name_input.send_keys(last_name)
-
-                # Similar waits for other input fields...
-
-                # Wait for the submit button to be clickable
-                submit_button = WebDriverWait(background_driver, 10).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.case-lookup-submit'))
-                )
-                submit_button.click()
-
-                # Wait for the next page to load
-                time.sleep(5)
-
-                # Check for the "Case Mismatch" modal
-                try:
-                    mismatch_modal = background_driver.find_element(By.CSS_SELECTOR, 'div.case-mismatch-modal')
-                    modal_text = mismatch_modal.text
-                    print(f"Apple: {modal_text}")
-                    print(f"\nBackground check will run every {bg_sleep} minutes")
-                except:
-                    print("Case ID active @apple_support")
-                    #handle case ID found scenario
+            except:
+                print(f"Case ID {run_counter}: Case is active @apple_support")
+                # handle case ID found scenario
 
             finally:
                 background_driver.quit()
-            
+
             time.sleep(bg_sleep * 60)
 
         except Exception as e:
             print(f"An error occurred during background check: {e}")
             continue
 
-
 if __name__ == "__main__":
-    # Prompt user to paste the confirmation link
-    confirmation_link = input("Paste the apple support confirmation link: ")
+    clear_terminal_screen()
+    print_menu()
+    user_choice = get_user_choice()
     
-    # Check if the confirmation link is valid
-    if not is_valid_confirmation_link(confirmation_link):
-        print("Invalid confirmation link. Closing.")
-    else:
-     preference = set_preference()
-     bg_sleep = set_bg_sleep()
-     # Create a new Chrome browser instance for background check
-     if preference == "gui":
-         driver = webdriver.Chrome()
-     else:
-         # Create a new Chrome browser instance for background check in headless mode
-         chrome_options = webdriver.ChromeOptions()
-         chrome_options.add_argument("--headless")
-         driver = webdriver.Chrome(options=chrome_options)
-
-     # Open the provided confirmation link
-     driver.get(confirmation_link)
-     print(f"Checking for session validity: {confirmation_link}")
+    if user_choice == "1" or user_choice == "":
+     submit_fmi_removal_request()
      
-     # Check if the session has expired
-     if check_session_expired(driver):
-         driver.quit()  # Session expired, exit the script
-
-     # Check for the "Continue" button
-     try:
-         continue_button = WebDriverWait(driver, 10).until(
-             EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.button--primary'))
-            )
-
-         # Click the "Continue" button
-         continue_button.click()
-     except StaleElementReferenceException:
-         # If a stale element exception occurs, re-find the element and click again
-         continue_button = WebDriverWait(driver, 10).until(
-             EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.button--primary'))
-            )
-         continue_button.click()
-
-     # Prompt user to choose between auto and manual entry
-     print("*Hint: Auto fetches the device details based on device IMEI/SN ")
-     user_choice = input("Choose 'auto' or 'manual' entry (default: auto): ").lower()
-
-     # Set default choice to "auto" if the user doesn't provide any input
-     user_choice = user_choice if user_choice in ['auto', 'manual'] else 'auto'
-
-     if user_choice == 'auto':
-         # You need to provide the SickW API key and imei
-         imei, api_key = get_key()
-         details = fetch_details_from_api(api_key, imei)
-     elif user_choice == 'manual':
-         details = manual_entry_popup() 
+     # Prompt user to paste the confirmation link
+     confirmation_link = input("Paste the apple support confirmation link: ")
+    
+     # Check if the confirmation link is valid
+     if not is_valid_confirmation_link(confirmation_link):
+         print("Invalid confirmation link. Closing.")
      else:
-         print("Invalid choice. Closing.")
+         preference = set_preference()
+         # Create a new Chrome browser instance for background check
+         if preference == "gui":
+             driver = webdriver.Chrome()
+         else:
+             # Create a new Chrome browser instance for background check in headless mode
+             chrome_options = webdriver.ChromeOptions()
+             chrome_options.add_argument("--headless")
+             driver = webdriver.Chrome(options=chrome_options)
 
-     # Rest of the logic to fill out the form
-     if details:
-         fill_out_form(driver, details)
-     else:
-         print("Closing due to missing details.")
-         sys.exit(1)
+         # Open the provided confirmation link
+         driver.get(confirmation_link)
+         print(f"Checking for session validity: {confirmation_link}")
+     
+         # Check if the session has expired
+         if check_session_expired(driver):
+             driver.quit()  # Session expired, exit the script
+
+         # Check for the "Continue" button
+         try:
+             continue_button = WebDriverWait(driver, 10).until(
+                 EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.button--primary'))
+                )
+
+             # Click the "Continue" button
+             continue_button.click()
+         except StaleElementReferenceException:
+              # If a stale element exception occurs, re-find the element and click again
+             continue_button = WebDriverWait(driver, 10).until(
+                 EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.button--primary'))
+                )
+             continue_button.click()
+
+         # Prompt user to choose between auto and manual entry
+         print("*Hint: Auto fetches the device details based on device IMEI/SN ")
+         user_choice = input("Choose 'auto' or 'manual' entry (default: auto): ").lower()
+
+         # Set default choice to "auto" if the user doesn't provide any input
+         user_choice = user_choice if user_choice in ['auto', 'manual'] else 'auto'
+
+         if user_choice == 'auto':
+             # You need to provide the SickW API key and imei
+             imei, api_key = get_key()
+             details = fetch_details_from_api(api_key, imei)
+         elif user_choice == 'manual':
+             details = manual_entry_popup() 
+         else:
+             print("Invalid choice. Closing.")
+
+         # Rest of the logic to fill out the form
+         if details:
+             fill_out_form(driver, details)
+         else:
+             print("Closing due to missing details.")
+             sys.exit(1)
             
 
-    # Start the background instance as a separate thread
-    background_thread = threading.Thread(target=background_instance, args=(bg_sleep,))
-    background_thread.start()
-    background_thread.join()
+         # Start the background instance as a separate thread
+         bg_sleep = set_bg_sleep()
+         run_counter = 0
+         source = "existing"
+         background_thread = threading.Thread(target=background_instance, args=(bg_sleep, run_counter,source))
+         background_thread.start()
+         background_thread.join()
 
-        
-        
-        
+    elif user_choice == "2":
+        option = check_existing_cases()  
+
+        if option == "1":
+            source = "existing"
+        elif option == "2":
+            source = "new"
+        elif option == "3":
+            sys.exit(0)  
+        else:
+            print("Invalid choice. Closing.")
+            sys.exit(1)
+
+        bg_sleep = set_bg_sleep()
+        run_counter = 0
+
+        background_thread = threading.Thread(target=background_instance, args=(bg_sleep, run_counter, source))
+        background_thread.start()
+        background_thread.join()
