@@ -171,63 +171,58 @@ def generate_random_name():
     return random_first_name, random_last_name
 
 
-def fetch_details_from_api(api_key, imei):
-    # Call the SickW API to fetch details based on imei
-    service = "30"  # Adjust the service ID based on your requirements
-    format_type = "json"  # Adjust the format type (json or html) based on your requirements
-
-    # Construct the curl command
-    curl_command = [
-        'curl',
-        f'https://sickw.com/api.php?format={format_type}&key={api_key}&imei={imei}&service={service}'
-    ]
-
+def fetch_details_from_api(api_key, imei, driver):
     try:
-        # Use subprocess to make a request to the API
-        response = subprocess.run(curl_command, capture_output=True, text=True)
+        # Construct the API URL
+        service = "30"
+        api_url = f"https://sickw.com/api.php?format=HTML&key={api_key}&imei={imei}&service={service}"
 
-        # Check if the curl command was successful (return code 0)
-        if response.returncode == 0:
-            # Parse the response and extract the details
-            try:
-                api_response = json.loads(response.stdout)
-            except json.JSONDecodeError as json_error:
-                print(f"Error decoding JSON response: {json_error}")
-                return {}
+        # Open a new tab and navigate to the API URL
+        new_tab_script = "window.open('{}', '_blank');".format(api_url)
+        driver.execute_script(new_tab_script)
+        driver.switch_to.window(driver.window_handles[1])
 
-            # Extract details from the API response
-            first_name, last_name = generate_random_name()
-            details = {
-                # Add dummy data for other fields
-                "first_name": f"{first_name}",
-                "last_name": f"{last_name}",
-                "store_name": "Experimax Houston Heights",
-                "address": "301 N Loop W",
-                "city": "Houston, Texas",
-                "state": "Texas",
-                "zip": "77008"
-            }
+        # Wait for the page to load
+        time.sleep(20)
 
-            result_details = api_response.get('result', '')
-            if result_details:
-                # Extracting "Estimated Purchase Date" and "Purchase Country"
-                estimated_purchase_date = re.search(r'Estimated Purchase Date: (\d{4}-\d{2}-\d{2})', result_details)
-                purchase_country_match = re.search(r'Purchase Country: (.+?)<br>', result_details)
+        # Create a directory for screenshots if it doesn't exist
+        current_directory = os.getcwd()
+        final_directory = os.path.join(current_directory, r'swip_screens')
+        if not os.path.exists(final_directory):
+            os.makedirs(final_directory)
 
-                # Check if the regex matches were successful
-                if estimated_purchase_date and purchase_country_match:
-                    estimated_purchase_date = estimated_purchase_date.group(1)
-                    purchase_country = purchase_country_match.group(1)
+        # Save screenshot
+        screenshot_path = os.path.join(final_directory, f'{imei}.png')
+        driver.save_screenshot(screenshot_path)
 
-                    # Add these details to the dictionary
-                    details["purchase_date"] = estimated_purchase_date
-                    details["country_of_purchase"] = purchase_country
+        # Wait for additional time if needed
+        time.sleep(2)
 
-            print("Parsed Details:", details)
-            return details
-        else:
-            print(f"Error: Unable to fetch details! failed with return code {response.returncode}")
-            return {}
+        # Get HTML content of the page
+        body_content = driver.page_source
+
+        # Extract estimated purchase date from the HTML content
+        start_index = body_content.find("Estimated Purchase Date:") + len("Estimated Purchase Date:")
+        end_index = body_content.find("iCloud Lock:")
+        estimated_purchase_date = body_content[start_index:end_index].strip().replace("<br>", "")
+
+        # Switch back to the original tab
+        driver.switch_to.window(driver.window_handles[0])
+
+        # Return the extracted details
+        first_name, last_name = generate_random_name()
+        details = {
+            "purchase_date": estimated_purchase_date,
+            "screenshot_path": screenshot_path,
+            "first_name": f"{first_name}",
+            "last_name": f"{last_name}",
+            "store_name": "Experimax Houston Heights",
+            "address": "301 N Loop W",
+            "city": "Houston, Texas",
+            "state": "Texas",
+            "zip": "77008"
+        }
+        return details
     except Exception as e:
         print(f"Error: {e}")
         return {}
@@ -322,7 +317,7 @@ def fill_out_form(driver, details):
     time.sleep(1)
     
     textarea_element.send_keys(
-        "only tried resetting with itunes, cant get help from store as im not in us currently. icloud status clean, please help me I want to use Apple"
+        "bought from ebay, icloud status clean, please help me i wanna use apple"
     )
     # Locate the file input by ID
     file_input = WebDriverWait(driver, 10).until(
@@ -331,8 +326,8 @@ def fill_out_form(driver, details):
     # Check if the file input is present
     if file_input:
         image_paths = [
-            os.path.abspath('./images/screenshot.png'),
-            os.path.abspath('./images/screenshot.pdf'),
+            details["screenshot_path"],
+            details["screenshot_path"],
         ]
 
         for path in image_paths:
@@ -601,7 +596,7 @@ if __name__ == "__main__":
          if user_choice == 'auto':
              # You need to provide the SickW API key and imei
              imei, api_key = get_key()
-             details = fetch_details_from_api(api_key, imei)
+             details = fetch_details_from_api(api_key, imei, driver)
          elif user_choice == 'manual':
              details = manual_entry_popup() 
          else:
