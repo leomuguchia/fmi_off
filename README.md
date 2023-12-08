@@ -47,6 +47,8 @@ Follow the on-screen instructions to provide the Apple Support confirmation link
 
 ### Disclaimer
 This script is provided as-is and is not intended for malicious purposes. Ensure that you have the right to use and modify the script according to your needs. Use it responsibly and in compliance with Apple's terms and conditions.
+https://support.apple.com/HT201365
+https://www.apple.com/legal/internet-services/icloud/en/terms.html
 
 ### Author
 Leomuguchia
