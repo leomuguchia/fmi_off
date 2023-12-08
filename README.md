@@ -51,3 +51,4 @@ This script is provided as-is and is not intended for malicious purposes. Ensure
 ### Author
 Leomuguchia
 GitHub: leomuguchia
+https://www.buymeacoffee.com/muguchialio
