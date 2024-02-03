@@ -8,7 +8,7 @@ The FMI Script is part of a larger iOS device management project, designed to di
 
 1. **Clone the repository:**
     ```bash
-    git clone https://github.com/liomuguchia/fmi-script.git
+    git clone https://github.com/liomuguchia/fmi-off.git
     cd fmi-script
     ```
 
